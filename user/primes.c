@@ -2,24 +2,27 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-void solve(int fd,int length){
-    int buf[length],p[2];
-    read(fd,buf,sizeof(buf));
-    close(fd);
-    int prime=buf[0],number=0;
-    printf("prime %d\n",prime);
-    pipe(p);
-    for(int i=0;i<length;i++){
-        if(buf[i]%prime!=0)write(p[1],&buf[i],sizeof(int)),number++;
-    }
-    close(p[1]);
-    if(number!=0){
+void solve(int fd){
+    int buf,p[2],prime=0;
+    if(read(fd,&buf,sizeof(int))!=0){
+        prime=buf;
+        printf("prime %d\n",prime);
+        pipe(p);
         if(fork()==0){
-            solve(p[0],number);
+            close(fd);
+            close(p[1]);
+            solve(p[0]);
         }else{
-            wait((int*)0);
+            while(read(fd,&buf,sizeof(int))!=0){
+                if(buf%prime!=0){
+                    write(p[1],&buf,sizeof(int));
+                }
+            }
+            close(p[1]);
+            wait((int*)0);    
         }
     }
+    
 }
 
 int main(int argc,char *argv[]){
@@ -29,6 +32,6 @@ int main(int argc,char *argv[]){
         write(p[1],&i,sizeof(int));
     }
     close(p[1]);
-    solve(p[0],34);
+    solve(p[0]);
     exit(0);
 }
