@@ -85,7 +85,7 @@ usertrap(void)
         p->ticksLeft=0;
         if(p->alarmFinished){
           p->alarmFinished=0;
-          p->alarmTrapframe=*p->trapframe;
+          p->alarmTrapframe=*(p->trapframe);
           p->trapframe->epc=(uint64)p->alarmHandler;
         }
       }
