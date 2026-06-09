@@ -65,6 +65,23 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause()==15){
+    char *mem;
+    uint64 pa,va;
+    uint flags;
+    va=PGROUNDDOWN(r_stval());
+    if(va>=MAXVA||(mem=kalloc())==0){
+      p->killed=1;
+    }else{
+      pagetable_t pagetable=p->pagetable;
+      pte_t *pte=walk(pagetable,va,0);
+      pa=PTE2PA(*pte);
+      flags=PTE_FLAGS(*pte);
+      flags|=PTE_W;
+      memmove(mem,(char*)pa,PGSIZE);
+      uvmunmap(pagetable,va,1,1);
+      mappages(pagetable,va,PGSIZE,(uint64)mem,flags);
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {

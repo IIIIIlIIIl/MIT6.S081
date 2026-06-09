@@ -178,8 +178,8 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
       panic("uvmunmap: not mapped");
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
+    uint64 pa = PTE2PA(*pte);
     if(do_free){
-      uint64 pa = PTE2PA(*pte);
       kfree((void*)pa);
     }
     *pte = 0;
@@ -303,20 +303,20 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+    (*pte)=((*pte)|PTE_W)^PTE_W;
+    (*pte)=(*pte)|PTE_COW;
     pa = PTE2PA(*pte);
+
+    kaddref((uint64)pa);
+
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
       goto err;
     }
   }
@@ -346,10 +346,27 @@ uvmclear(pagetable_t pagetable, uint64 va)
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
-  uint64 n, va0, pa0;
+  uint64 n, va0, pa0, pa;
+  uint flags;
+  pte_t *pte;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    if(va0>=MAXVA)return -1;
+    pte=walk(pagetable,va0,0);
+    if(pte==0)return -1;
+    if((((*pte)&PTE_W)==0)&&((*pte)&PTE_COW)){
+      char *mem;
+      if((mem=kalloc())==0){
+        return -1;
+      }
+      pa=PTE2PA(*pte);
+      flags=PTE_FLAGS(*pte);
+      flags|=PTE_W;
+      memmove(mem,(char*)pa,PGSIZE);
+      uvmunmap(pagetable,va0,1,1);
+      mappages(pagetable,va0,PGSIZE,(uint64)mem,flags);
+    }
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
